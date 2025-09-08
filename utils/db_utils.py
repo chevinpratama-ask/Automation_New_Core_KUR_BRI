@@ -8,8 +8,11 @@ def get_connection():
         "UID=migrasi.aos;"
         "PWD=Askrindo%1234;"
     )
+# --makerid, FlagPasar, KodePasar, RangkaBangunan, PenutupAtap, BahanLantai, BahanDinding, JumlahLantai, PlatNomorKendaraan, 
+# NomorBuktiKepemilikan, NomorRangka, NomorSeri, NomorMesin, Warna, MerkKendaraan, MerkTipeKendaraan, 
+# KodeJenisKendaraan, DeskripsiAgunan, TanggalMulaiChannel, TanggalAkhirChannel, LokasiResiko, KodePosResiko, Currency
 
-def fetch_policy_by_no(no_rekening_pinjaman):
+def fetch_policy_by_no(nomor_rekening_pinjaman):
     conn = get_connection()
     cursor = conn.cursor()
     query = """
@@ -21,10 +24,10 @@ def fetch_policy_by_no(no_rekening_pinjaman):
             f_id_kategori_asuransi AS "FIDJenisAsuransi",
             no_rekening_pinjaman AS "NomorRekeningPinjaman",
             cif_rekening_simpanan AS "CIFRekeningPinjaman",
-            LoanType AS "loan_type",
+            loan_type AS "loan_type",
             loan_type_desc AS "LoanTypeDesc",
             jangka_waktu_bulan AS "JangkaWaktuBulan",
-            jangka_waktu_plihan  AS "JangkaWaktuPilihan",
+            jangka_waktu_pilihan  AS "JangkaWaktuPilihan",
             suku_bunga_pinjaman AS "SukuBungaPinjamanTahun",
             plafon AS "Plafon",
             outstanding AS "Outstanding",
@@ -81,16 +84,60 @@ def fetch_policy_by_no(no_rekening_pinjaman):
             nominal_premi_sebelumnya AS "NominalPremiSebelumnya",
             f_id_jenis_agunan AS "FIDJenisAgunan",
             f_id_agunan AS "FIDAgunan",
-            
-            -- Tambahkan alias lain sesuai field payload kamu
+            kode_pos_agunan AS "KodePosAgunan",
+            alamat_agunan AS "AlamatAgunan",
+            tahun_agunan AS "TahunAgunan",
+            nominal_objek_pertanggungan  AS "NominalObjekPertanggungan",
+            fid_cash_vault AS "FIDCashVault",
+            fid_cash_pickup AS "FIDCashPickup",
+            nama_ahli_waris AS "NamaAhliWaris",
+            tanggal_lahir_ahli_waris AS "TanggalLahirAhliWaris",
+            f_id_jk_ahli_waris AS "FIDJenisKelaminAhliWaris",
+            jenis_kelamin_ahli_waris AS "JenisKelaminAhliWaris",
+            alamat_ahli_waris AS "AlamatAhliWaris",
+            no_telp_ahli_waris AS "NomorTelpAhliWaris",
+            f_id_hubungan_ahli_waris AS "FIDHubunganAhliWaris",
+            nomor_rekening_simpanan AS "NomorRekeningSimpanan",
+            cif_rekening_simpanan AS "CIFRekeningSimpanan",
+            promo_code AS "PromoCode",
+            f_id_schedule_premium AS "FIDScheduleCoveringNextPremium",
+            nominal_objek_pertanggungan_valas AS "NominalObjekPertanggunganValas",
+            nilai_kurs AS "NilaiKurs",
+            tanggal_kurs AS "TanggalKurs",
+            nomor_rekening_debet AS "NomorRekeningDebet",
+            fid_channel_covering   AS "FIDChannelCovering",
+            channel_covering AS "ChannelCovering",
+            pn_referal  AS "PNReferal"
         FROM brisurf.t_covering_validation
         WHERE no_rekening_pinjaman = ?
     """
-    cursor.execute(query, (no_rekening_pinjaman.strip(),))
+    cursor.execute(query, (nomor_rekening_pinjaman.strip(),))
     row = cursor.fetchone()
     columns = [column[0] for column in cursor.description]
     conn.close()
 
     if row:
-        return dict(zip(columns, row))  # ✅ Output: dict dengan key sesuai payload
-    return {}
+        return query, dict(zip(columns, row))  # return tuple (query string, dict hasil)
+    else:
+        return query, {}
+    
+def fetch_policy_by_norekijp(nomor_rekening_pinjaman):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT 
+            no_rekening_pinjaman, tahun_ke, nominal_ijp, outstanding_teoritis 
+            FROM brisurf.t_ijp_projected tip 
+            WHERE no_rekening_pinjaman = ?
+            ORDER BY tahun_ke
+        """
+    cursor.execute(query, (nomor_rekening_pinjaman.strip(),))
+    rows = cursor.fetchall()
+    columns = [column[0] for column in cursor.description]
+    conn.close()
+
+    if rows:
+        # kembalikan list of dict
+        return query, [dict(zip(columns, row)) for row in rows]
+    else:
+        return query, []    
