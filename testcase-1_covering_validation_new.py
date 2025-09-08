@@ -31,6 +31,8 @@ import math
 # if root_dir not in sys.path:
 #     sys.path.insert(0, root_dir)
 from utils.db_utils import fetch_policy_by_no
+from utils.db_utils import fetch_policy_by_norekijp
+
 
 
 
@@ -192,7 +194,7 @@ def write_payload_response(pdf: FPDF, payload: dict, response: dict, step_index:
     pdf.rect(left_x, start_y, box_width * 2, full_height)
     pdf.line(left_x + box_width, start_y, left_x + box_width, start_y + full_height)
 
-#================================================
+#================================================singlerow=================#
 def write_verifikasi_database_auto(
     pdf: FPDF, 
     query: str, 
@@ -309,7 +311,67 @@ def write_verifikasi_database_auto(
                 pdf.set_xy(x_start, y_start)
 
             pdf.ln(max_height)
+#================================== banyak Row==============#
+def write_verifikasi_database_multi(pdf: FPDF, query: str, db_rows: list[dict], step_index: int):
+    pdf.set_left_margin(20)
+    pdf.set_right_margin(20)
+    pdf.set_x(pdf.l_margin)
 
+    usable_width = pdf.w - pdf.l_margin - pdf.r_margin
+    cell_height = 5
+
+    # ========== TAMPILKAN QUERY ==========
+    pdf.set_font("Courier", 'I', 9)
+    pdf.cell(0, cell_height, "Query:", ln=True)
+
+    query_str = str(query).strip() if query else ""
+
+    if query_str:
+        query_lines = query_str.splitlines()
+        for line in query_lines:
+            if pdf.get_y() + cell_height > pdf.h - 15:  # cek batas bawah halaman
+                pdf.add_page()
+            pdf.set_x(pdf.l_margin)  # mulai dari margin kiri
+            pdf.multi_cell(usable_width, cell_height, line, border=0)
+    else:
+        pdf.multi_cell(usable_width, cell_height, "(kosong)", border=0)
+
+    pdf.ln(4)
+
+    # ========== TAMPILKAN DATA (TABLE) ==========
+    if not db_rows:
+        pdf.set_font("Arial", 'I', 9)
+        pdf.cell(0, 8, "Tidak ada hasil dari query.", ln=True)
+        return
+
+    fields = list(db_rows[0].keys())
+    num_cols = len(fields)
+    col_width = usable_width / num_cols
+
+    # Header
+    pdf.set_font("Arial", 'B', 8)
+    pdf.set_fill_color(230, 230, 230)
+    for f in fields:
+        pdf.cell(col_width, cell_height, str(f), border=1, fill=True, align="C")
+    pdf.ln(cell_height)
+
+    # Rows
+    pdf.set_font("Arial", '', 8)
+    for row in db_rows:
+        if pdf.get_y() + cell_height > pdf.h - 15:
+            pdf.add_page()
+            # redraw header
+            pdf.set_font("Arial", 'B', 8)
+            pdf.set_fill_color(230, 230, 230)
+            for f in fields:
+                pdf.cell(col_width, cell_height, str(f), border=1, fill=True, align="C")
+            pdf.ln(cell_height)
+            pdf.set_font("Arial", '', 8)
+
+        for f in fields:
+            val = str(row.get(f, "")) if row.get(f, "") is not None else "-"
+            pdf.cell(col_width, cell_height, val, border=1)
+        pdf.ln(cell_height)
 #==================== verifikasi DB vs Payload==========#
 def verify_db_vs_payload(db_row: dict, payload: dict) -> dict:
     """
@@ -541,7 +603,12 @@ def generate_pdf_report (
     db_step_index=None,
     nomor_rekening_pinjaman=None,
     db_verification_result=None,
-    db_verification_step_index=None 
+    db_verification_step_index=None,
+    db_query_step4=None,
+    db_result_step4=None,
+    db_step_index_step4=None
+
+
     
 ):
     #-------Simpan Folder PDF-----------#
@@ -807,6 +874,11 @@ def generate_pdf_report (
             write_verifikasi_result(pdf, db_verification_result)
             pdf.ln(5)
 
+        # === DB Query & Data (Step 4) ===
+        if db_query_step4 and db_result_step4 and db_step_index_step4 == i:
+            write_verifikasi_database_multi(pdf, db_query_step4, db_result_step4, step_index=i + 1)
+            pdf.ln(5)
+
 
 
     if status != "Passed":
@@ -846,6 +918,8 @@ def test_create_polis(driver):
     payload = {}
     response_json = {}
     db_verification_result = {}
+    db_query_step4 = {}
+    db_result_step4 = {}
 
     try:
         # ================= STEP 1: Hit API =================
@@ -998,7 +1072,7 @@ def test_create_polis(driver):
         # time.sleep(2)
 
         # ================= STEP 2: Verifikasi Database =================
-        test_steps_rendered.append("[Test_Step_2]: Verifikasi data di database")
+        test_steps_rendered.append("[Test_Step_2]: Verifikasi database Covering Validation")
         screenshot_rendered.append(None)
 
         db_query, db_result = fetch_policy_by_no(nomor_rekening_pinjaman)
@@ -1018,7 +1092,23 @@ def test_create_polis(driver):
 
         db_verification_result = verify_db_vs_payload(db_result, payload)
 
+        #============================ STEP 4 : Verifikasi Database IJP===============
+        test_steps_rendered.append("[Test_Step_4]: Verifikasi Database IJP")
+        screenshot_rendered.append(None)
 
+        db_query_step4, db_result_step4 = fetch_policy_by_norekijp(nomor_rekening_pinjaman)
+
+        if not db_result_step4:
+            pytest.fail(f"Data IJP dengan nomor '{nomor_rekening_pinjaman}' tidak ditemukan di database!")
+        else:
+            print("[INFO] Data IJP ditemukan di DB:")
+            for row in db_result_step4:
+                for k, v in row.items():
+                    print(f" - {k}: {v}")
+        # #========================= STEP : 5 Verifikasi IJP dan perhitungan-=======================
+        # test_steps_rendered.append("[Test_Step_5]: Verifikasi data di Db dan rumus IJP")
+        # screenshot_rendered.append(None)
+        # db_verification_result_ijp = verify_db_vs_payload(db_result, )
 
 
 
@@ -1040,7 +1130,10 @@ def test_create_polis(driver):
             db_step_index=1,
             db_verification_step_index=2,
             nomor_rekening_pinjaman=nomor_rekening_pinjaman,
-            db_verification_result=db_verification_result
+            db_verification_result=db_verification_result,
+            db_query_step4 = db_query_step4,
+            db_result_step4 = db_result_step4,
+            db_step_index_step4=3
 
         )
 
@@ -1079,7 +1172,10 @@ def test_create_polis(driver):
             db_step_index=1,
             db_verification_step_index=2,
             nomor_rekening_pinjaman=nomor_rekening_pinjaman,
-            db_verification_result=db_verification_result
+            db_verification_result=db_verification_result,
+            db_query_step4 = db_query_step4,
+            db_result_step4 = db_result_step4,
+            db_step_index_step4=3
 
         )
 
